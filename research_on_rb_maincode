@@ -1,0 +1,66 @@
+## Created in R code
+
+library(stats)
+library(lmtest)
+library(dplyr)
+library(plm)
+library(Hmisc)
+library(pastecs)
+
+#summary statistics of the cleaned NFL data that was collected
+describe(Clean_Data)
+stat.desc(Clean_Data[3:12], basic = FALSE, desc=TRUE, norm = FALSE, p=0.95)
+
+#log the Salary to get work with percentatges of the salary rather than the raw numbers.
+Clean_Data$RB1_Salary=log(Clean_Data$RB1_Salary)
+Clean_Data$RB_Room=log(Clean_Data$RB_Room)
+
+#run as regular a regular logisitic function
+data1= Clean_Data
+lm1= lm(Yds~`Run Percentage`+RB1_Salary+RB_Room+Lead_Back,data=Clean_Data)
+summary(lm1)
+
+#create the year dummies in preparation for converting to pooled data
+year20 = rep(0,nrow(data1))
+year20[data1$Year == 2020] = 1
+year19 = rep(0,nrow(data1))
+year19[data1$Year == 2019]=1
+year18 = rep(0,nrow(data1))
+year18[data1$Year == 2018]=1
+
+#add columns to data frame
+yearDummies = data.frame(year20,year19,year18)
+data1=bind_cols(Clean_Data,yearDummies)
+
+#run as pooled data frame
+lm_pooled = lm(Yds ~`Run Percentage`+Att+TD+Lng+Fmb+Lead_Back+RB1_Salary+
+           RB_Room+year20+year19,data=data1)
+summary(lm_pooled)
+
+#First Difference Model
+data1=pdata.frame(data1, index = c("Tm","Year"),
+                  drop.index = TRUE, row.names = TRUE)
+
+FirstDiffModel = plm(Yds ~Run.Percentage+Att+TD+Fmb+Lead_Back+log(RB1_Salary)
+                     +log(RB_Room), data=data1, model = "fd")
+summary(FirstDiffModel)
+
+#fixed effects with no contorl varibles 
+FEmodel_1 = plm(Yds ~ Run.Percentage+Lead_Back+RB1_Salary
+               +RB_Room,data=data1)
+summary(FEmodel_1)
+
+#add rushing control variables
+FEmodel_2 = plm(Yds ~Run.Percentage+TD+Fmb+Lead_Back+RB1_Salary
+              +RB_Room+YBC.ATT, data=data1, model = "within")
+summary(FEmodel_2)
+
+#add team variables
+FEmodel_3 =plm(Yds ~Lead_Back+Run.Percentage+RB_Room+RB1_Salary+TD+YBC.ATT+Fmb
+              +Score_Percentage+TO_Percentage, data=data1, model = "within")
+summary(FEmodel_3)
+
+#Add passing variables
+FEmodel_4=plm(Yds ~Lead_Back+Run.Percentage+RB_Room+RB1_Salary+TD+YBC.ATT+Fmb
+             +Cmp+PAtt+PYds+PTD+Int, data=data1, model = "within")
+summary(FEmodel_4)
